@@ -1,0 +1,86 @@
+
+body {
+    background: #dbdada;
+    font-family: Helvetica, Arial, sans-serif;
+}
+
+#wrapper {
+    margin: 0px auto;
+    background: #f7f7f7;
+    padding: 5px 20px;
+}
+
+@media (min-width: 460px) {
+    #wrapper {
+        width: 400px;
+    }
+}
+
+.day-header {
+    background: rgba(165, 255, 255, 0.88);
+    border-radius: 30px;
+    padding: 10px;
+    margin-bottom: 10px;
+    font-size: 1.5em;
+    text-align: center;
+    font-weight: bold;
+}
+
+.day-box{
+    background: rgba(165, 255, 255, 0.88);
+    border-radius: 30px;
+    padding: 10px;
+}
+
+.log-entry-box {
+    padding: 20px 0px;
+    border-top: 1px solid black;
+    /*
+    border-radius: 7px;
+    background: #dadada;
+    margin-bottom: 10px;
+    */
+}
+
+.log-entry-time {
+    margin-left: 5px;
+    padding: 0px 5px;
+    float: left;
+    font-size: larger;
+    border: 1px solid;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.log-entry-duration {
+    float: right;
+}
+
+.log-entry-items-box {
+    clear: both;
+    padding-top: 5px;
+}
+
+.log-entry-items-box ul {
+    padding-left: 30px;
+    font-size: 0.9em;
+}
+
+.log-entry-box h5 {
+    margin: 0 0 8px 5px;
+}
+
+.log-entry-comment {
+    padding-left: 7px;
+    font-size: smaller;
+    /*
+    border: 1px solid black;
+    border-radius: 5px;
+    */
+}
+
+
+
+
+
+
