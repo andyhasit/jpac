@@ -1,3 +1,4 @@
 -f /usr/share/pip-wheels
 bottle==0.12.16
 ujson==1.35
+pytest==4.0.2

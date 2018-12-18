@@ -4,6 +4,12 @@ from json_storage import ApiError, MyJsonStorageHandler
 
 
 JSON_BASE = '/home/andyhasit/pointy/json_dbs'
+STORES = {}
+PASSWORDS = {
+    ('pointy_v2', 'andyhasit') : 'frickingawesome45'
+    }
+APPS = ('pointy_v2', )
+
 
 application = default_app()
 
@@ -40,23 +46,25 @@ def index():
     return template('index')
 
 
-storage_containers = {}
-
 @route('/<app>/actions', method='POST')
 def actions(app):
     return wrap_storage_call(request, app, 'do_actions', request.json)
 
 
-def get_storage(app, user):
-    if user != 'tim':
-        raise HTTPError(401, 'Invalid login')
+def get_storage(app, user, password):
     key = (app, user)
-    if key in storage_containers:
-        storage = storage_containers[key]
+    if app not in APPS:
+        raise HTTPError(404, 'App {} does not exist'.format(app))
+    if key not in PASSWORDS:
+        raise HTTPError(403, 'No account for user {} in app {}'.format(user, app))
+    if PASSWORDS[key] != password:
+        raise HTTPError(401, 'Invalid login')
+    if key in STORES:
+        storage = STORES[key]
     else:
         storage = MyJsonStorageHandler()
         storage.set_paths(JSON_BASE, '{}____{}'.format(*key))
-        storage_containers[key] = storage
+        STORES[key] = storage
     return storage
 
 
@@ -72,7 +80,7 @@ def wrap_storage_call(request, app, method, params):
         err.add_header('WWW-Authenticate','')
         '''
         #TODO: wrap in try execpt which validates user too
-        storage = get_storage(app, user)
+        storage = get_storage(app, user, password)
         result = getattr(storage, method)(**params)
         return {
             "status" : "success",
