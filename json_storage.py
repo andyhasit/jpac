@@ -124,7 +124,13 @@ class ActionsMixin():
         @transaction_id: the id of the open transaction (optional)
         @action_sets: changes to make.
 
-        The action_sets dict may contain keys: create, read, update or delete
+        The action_sets dict may contain keys:
+            create > dict
+            read   > dict
+            update > list
+            delete > list
+
+
         The return dict will contains keys: revision, queries and new_ids
         Reads are performed last, so will take into account changes made
 
@@ -178,15 +184,23 @@ class ActionsMixin():
             }
         }
 
-        update_example: {
-            "1234": {                       # the key of the object to edit
+        update_example: [                   # note this is a list
+            {
+                "key": "1234"               # the key of the object to edit
                 "path": "some/collection",  # the json path
                 "record": {                 # the record
                     "name": "tim",
                     "age": 23
                 }
             }
-        }
+        ]
+
+        delete_example: [                   # note this is a list
+            {
+                "key": "1234"               # the key of the object to edit
+                "path": "some/collection",  # the json path
+            }
+        ]
 
 
         """
@@ -196,20 +210,16 @@ class ActionsMixin():
         new_ids = {}
         queries = {}
         if 'create' in action_sets:
-            actions = action_sets['create']
-            for key, params in actions.items():
+            for key, params in action_sets['create'].items():
                 new_ids[key] = self._create(**params)
         if 'update' in action_sets:
-            actions = action_sets['update']
-            for key, params in actions.items():
-                self._update(key=key, **params)
+            for params in action_sets['update']:
+                self._update(**params)
         if 'delete' in action_sets:
-            actions = action_sets['delete']
-            for key, params in actions.items():
+            for params in action_sets['delete']:
                 self._delete(key=key, **params)
         if 'read' in action_sets:
-            actions = action_sets['read']
-            for key, params in actions.items():
+            for key, params in action_sets['read'].items():
                 queries[key] = self._read(**params)
         result = {
             'revision': self.meta_db['rev'],
