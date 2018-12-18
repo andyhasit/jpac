@@ -16,8 +16,10 @@ import ujson
 
 class ApiError(Exception):
 
-    def __init__(self, code="uncaught", msg="", data=None):
-        super(Exception, self).__init__('{} -- {}'.format(code, msg))
+    def __init__(self, code="uncaught", msg=None, data=None):
+        if msg is None:
+            msg = code
+        super(Exception, self).__init__(msg)
         self.code = code
         self.data = data
 
@@ -50,9 +52,9 @@ class JsonTwoFileStorageHandler():
         if self.transaction_id is not None:
             now = datetime.datetime.now()
             timeout = self.transaction_initiated + datetime.timedelta(seconds=self.transaction_timeout)
-            if timeout > now:
+            if now > timeout:
                 self._must_reload = True
-
+                raise ApiError(code='transaction_timed_out')
         if self._must_reload:
             self.data_db = self._load_json(self._data_db_path)
             self.meta_db = self._load_json(self._meta_db_path)
@@ -69,7 +71,7 @@ class JsonTwoFileStorageHandler():
         self.transaction_id = transaction_id
         self.transaction_initiated = datetime.datetime.now()
         self.transaction_timeout = timeout
-        return transaction_id
+        return {'transaction_id': transaction_id}
 
     def commit_transaction(self, transaction_id):
         if transaction_id == self.transaction_id:
@@ -118,24 +120,102 @@ class ActionsMixin():
 
     def do_actions(self, revision, action_sets, transaction_id=None):
         """
-        @revision: the client stored revision
-        @action_sets: changes to make
-        @transaction_id: the id of the pending transaction if there is one
+        @revision: the client stored revision (we will check if it matches)
+        @transaction_id: the id of the open transaction (optional)
+        @action_sets: changes to make.
+
+        The action_sets dict may contain keys: create, read, update or delete
+        The return dict will contains keys: revision, queries and new_ids
+        Reads are performed last, so will take into account changes made
+
+        action_sets_example = {
+            "create": {...},          # optional
+            "read":   {...},          # optional
+            "update": {...},          # optional
+            "delete": {...},          # optional
+        }
+
+        result_example = {
+            "revision": 1234,
+            "queries":  {...},
+            "new_ids":  {...}
+        }
+
+        read_example: {
+            "query_a": {                    # the return identifier
+                "path": "some/collection",  # the json path
+                "as_list": true             # whether to convert to list
+            },
+            "query_b": {                    # the return identifier
+                "path": "setting/13425",    # the json path
+            }
+        }
+        result_example: {
+            "revision": 1234,
+            "new_ids": {...},
+            "queries": {
+                "query_a": [...],
+                "query_b": {...}
+            }
+        }
+        The key is used to match the query results in the resuts>read dict
+
+
+        create_example: {
+            "1": {                          # to match the new id in results
+                "path": "some/collection",  # the json path
+                "record": {                 # the record
+                    "name": "tim",
+                    "age": 23
+                }
+            }
+        }
+        result_example: {
+            "revision": 1234,
+            "queries": {...},
+            "new_ids": {
+                "1": 1234
+            }
+        }
+
+        update_example: {
+            "1234": {                       # the key of the object to edit
+                "path": "some/collection",  # the json path
+                "record": {                 # the record
+                    "name": "tim",
+                    "age": 23
+                }
+            }
+        }
+
+
         """
         self.load()
         self.check_transaction(transaction_id)
         self.check_revision(revision)
-        result = {}
-        for action_type, actions in action_sets.items():
-            if action_type not in self.valid_actions:
-                raise ApiError(code='invalid_action_type', data={
-                    'action_type': action_type,
-                    })
-            action_results = {}
+        new_ids = {}
+        queries = {}
+        if 'create' in action_sets:
+            actions = action_sets['create']
             for key, params in actions.items():
-                action_results[key] = getattr(self, '_' + action_type)(**params)
-            result[action_type] = action_results
-        result['revision'] = self.meta_db['rev']
+                new_ids[key] = self._create(**params)
+        if 'update' in action_sets:
+            actions = action_sets['update']
+            for key, params in actions.items():
+                self._update(key=key, **params)
+        if 'delete' in action_sets:
+            actions = action_sets['delete']
+            for key, params in actions.items():
+                self._delete(key=key, **params)
+        if 'read' in action_sets:
+            actions = action_sets['read']
+            for key, params in actions.items():
+                queries[key] = self._read(**params)
+        result = {
+            'revision': self.meta_db['rev'],
+            'queries': queries,
+            'new_ids': new_ids
+        }
         if transaction_id is None:
             self.save()
         return result
