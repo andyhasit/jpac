@@ -58,7 +58,9 @@ def get_storage(app, user, password):
     if key not in PASSWORDS:
         raise HTTPError(403, 'No account for user {} in app {}'.format(user, app))
     if PASSWORDS[key] != password:
-        raise HTTPError(401, 'Invalid login')
+        err = HTTPError(401, 'Invalid login')
+        err.add_header('WWW-Authenticate','')
+        raise err
     if key in STORES:
         storage = STORES[key]
     else:
@@ -74,12 +76,6 @@ def wrap_storage_call(request, app, method, params):
     """
     try:
         user, password = request.auth or (None, None)
-
-        '''
-        err = HTTPError(401, text)
-        err.add_header('WWW-Authenticate','')
-        '''
-        #TODO: wrap in try execpt which validates user too
         storage = get_storage(app, user, password)
         result = getattr(storage, method)(**params)
         return {

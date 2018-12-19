@@ -1,35 +1,40 @@
 import os
 import pytest
+import shutil
 from datetime import datetime
-from ..json_storage import MyJsonStorageHandler
+from ..json_storage import MyJsonStorageHandler, ApiError
 
-JSON_BASE = os.path.join(os.path.dirname(__file__), 'json_dbs')
 
-@pytest.fixture(scope="module", autouse=True)
-def my_fixture():
-    pass
-
-def get_storage():
-    storage = MyJsonStorageHandler()
-    storage.set_paths(JSON_BASE, str(datetime.now().utcnow()))
-    return storage
-
+JSON_TEST_DIR = os.path.join(os.path.dirname(__file__), 'json_dbs')
 CREATE_RECORD = {
-        "create": {
-            "a": {
-                "path": "records",
-                "record": {
-                    "name": "tim",
-                    "age": 23
-                }
+    "create": {
+        "a": {
+            "path": "records",
+            "record": {
+                "name": "tim",
+                "age": 23
             }
         }
     }
+}
 READ_RECORDS = {
-        "read": {
-            "records": {"path":"records"}
-        }
+    "read": {
+        "records": {"path":"records"}
     }
+}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def my_fixture():
+    shutil.rmtree(JSON_TEST_DIR)
+    os.makedirs(JSON_TEST_DIR)
+
+
+def get_storage():
+    storage = MyJsonStorageHandler()
+    storage.set_paths(JSON_TEST_DIR, str(datetime.now().utcnow()))
+    return storage
+
 
 def test_create():
     storage = get_storage()
@@ -43,11 +48,47 @@ def test_create():
 
 
 def test_update():
-    pass
+    storage = get_storage()
+    result = storage.do_actions(0, CREATE_RECORD)
+    original_revision = result['revision']
+    new_id = result['new_ids']["a"]
+    result = storage.do_actions(result['revision'], READ_RECORDS)
+    result = storage.do_actions(result['revision'], {
+        'update': [
+            {
+                "key": new_id,
+                "path": "records",
+                "record": {
+                    "name": "andrea"
+                }
+            }
+        ]
+    })
+    result = storage.do_actions(result['revision'], READ_RECORDS)
+    assert len(result["queries"]["records"]) == 1
+    record = result["queries"]["records"][0]
+    assert result['revision'] == original_revision + 1
+    assert record["id"] == new_id
+    assert record["name"] == "andrea"
 
 
 def test_delete():
-    pass
+    storage = get_storage()
+    result = storage.do_actions(0, CREATE_RECORD)
+    original_revision = result['revision']
+    new_id = result['new_ids']["a"]
+    result = storage.do_actions(result['revision'], READ_RECORDS)
+    result = storage.do_actions(result['revision'], {
+        'delete': [
+            {
+                "key": new_id,
+                "path": "records"
+            }
+        ]
+    })
+    result = storage.do_actions(result['revision'], READ_RECORDS)
+    assert result['revision'] == original_revision + 1
+    assert len(result["queries"]["records"]) == 0
 
 
 def test_transaction_commit():
@@ -57,6 +98,8 @@ def test_transaction_commit():
     storage.commit_transaction(transaction_id)
     result = storage.do_actions(result['revision'], READ_RECORDS)
     assert len(result["queries"]["records"]) == 1
+    record = result["queries"]["records"][0]
+    assert record["name"] == "tim"
 
 
 def test_transaction_abort():
@@ -67,28 +110,50 @@ def test_transaction_abort():
     result = storage.do_actions(result['revision'], CREATE_RECORD, transaction_id)
     result = storage.do_actions(result['revision'], CREATE_RECORD, transaction_id)
     result = storage.abort_transaction(transaction_id)
-    print(result['revision'])
     result = storage.do_actions(result['revision'], READ_RECORDS)
     assert len(result["queries"]["records"]) == 0
     assert result['revision'] == original_revision
 
 
-def test_transaction_timeout():
-    pass
+def test_raises_error_when_transaction_timed_out():
+    storage = get_storage()
+    result = storage.start_transaction(0)
+    original_revision = result['revision']
+    transaction_id = result['transaction_id']
+    with pytest.raises(ApiError) as err:
+        result = storage.do_actions(result['revision'], CREATE_RECORD, transaction_id)
+    assert err.value.code == 'transaction_timed_out'
+    assert result['revision'] == original_revision
 
 
-def test_error_transaction_timed_out():
-    pass
+def test_raises_error_when_transaction_in_progress():
+    storage = get_storage()
+    result = storage.start_transaction()
+    original_revision = result['revision']
+    with pytest.raises(ApiError) as err:
+        result = storage.do_actions(result['revision'], CREATE_RECORD, None)
+    assert err.value.code == 'transaction_in_progress'
+    assert result['revision'] == original_revision
 
 
-def test_error_transaction_in_progress():
-    pass
+def test_raises_error_when_no_transaction_in_progress():
+    storage = get_storage()
+    result = storage.do_actions(0, CREATE_RECORD)
+    original_revision = result['revision']
+    transaction_id = 12345
+    with pytest.raises(ApiError) as err:
+        result = storage.do_actions(result['revision'], CREATE_RECORD, transaction_id)
+    assert err.value.code == 'no_transaction_in_progress'
+    assert result['revision'] == original_revision
 
 
-def test_transaction_error_no_transaction_in_progress():
-    pass
-
-
-def test_error_transaction_id_mismatcht():
-    pass
+def test_raises_error_when_transaction_id_mismatch():
+    storage = get_storage()
+    result = storage.start_transaction()
+    original_revision = result['revision']
+    transaction_id = 12345
+    with pytest.raises(ApiError) as err:
+        result = storage.do_actions(result['revision'], CREATE_RECORD, transaction_id)
+    assert err.value.code == 'transaction_id_mismatch'
+    assert result['revision'] == original_revision
 

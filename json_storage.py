@@ -250,7 +250,7 @@ class ActionsMixin():
                 self._update(**params)
         if 'delete' in action_sets:
             for params in action_sets['delete']:
-                self._delete(key=key, **params)
+                self._delete(**params)
         if 'read' in action_sets:
             for key, params in action_sets['read'].items():
                 queries[key] = self._read(**params)
@@ -273,12 +273,12 @@ class ActionsMixin():
 
     def _create(self, path, record):
         collection = self._drill(path)
-        key = int(self.meta_db['last_id']) + 1
-        record['id'] = key
-        collection[key] = record
-        self.meta_db['last_id'] = key
+        new_id = int(self.meta_db['last_id']) + 1
+        record['id'] = new_id
+        collection[new_id] = record
+        self.meta_db['last_id'] = new_id
         self.revision += 1
-        return key
+        return new_id
 
     def _update(self, path, key, record):
         """
@@ -288,7 +288,6 @@ class ActionsMixin():
         collection[key] = record
         record['id'] = key
         self.revision += 1
-        return key
 
     def _delete(self, path, key):
         """
@@ -297,7 +296,6 @@ class ActionsMixin():
         collection = self._drill(path)
         del collection[key]
         self.revision += 1
-        return key
 
     def _read(self, path):
         """
