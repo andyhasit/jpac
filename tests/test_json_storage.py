@@ -42,6 +42,14 @@ def test_create():
     assert record["name"] == "tim"
 
 
+def test_update():
+    pass
+
+
+def test_delete():
+    pass
+
+
 def test_transaction_commit():
     storage = get_storage()
     transaction_id = storage.start_transaction()['transaction_id']
@@ -52,7 +60,17 @@ def test_transaction_commit():
 
 
 def test_transaction_abort():
-    pass
+    storage = get_storage()
+    result = storage.start_transaction()
+    transaction_id = result['transaction_id']
+    original_revision = result['revision']
+    result = storage.do_actions(result['revision'], CREATE_RECORD, transaction_id)
+    result = storage.do_actions(result['revision'], CREATE_RECORD, transaction_id)
+    result = storage.abort_transaction(transaction_id)
+    print(result['revision'])
+    result = storage.do_actions(result['revision'], READ_RECORDS)
+    assert len(result["queries"]["records"]) == 0
+    assert result['revision'] == original_revision
 
 
 def test_transaction_timeout():

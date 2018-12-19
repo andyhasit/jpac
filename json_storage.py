@@ -12,6 +12,9 @@ We track the , which the client can use to determine if its data is dirty.
 import os
 import datetime
 import ujson
+import uuid
+
+REV_KEY = 'rev'
 
 
 class ApiError(Exception):
@@ -37,6 +40,7 @@ class JsonTwoFileStorageHandler():
     def __init__(self):
         self._must_reload = True
         self.transaction_id = None
+        self._revision_before_transaction = None
         self.transaction_initiated = None
         self.transaction_timeout = None
         self.data_db = None
@@ -44,22 +48,26 @@ class JsonTwoFileStorageHandler():
         self._data_db_path = None
         self._meta_db_path = None
 
+    @property
+    def revision(self):
+        if self.meta_db:
+            return self.meta_db[REV_KEY]
+
+    @revision.setter
+    def revision(self, value):
+        self.meta_db[REV_KEY] = value
+
     def set_paths(self, base_path, database_name):
         self._data_db_path = self._get_db_path(base_path, database_name, 'data_db')
         self._meta_db_path = self._get_db_path(base_path, database_name, 'meta_db')
 
     def load(self):
-        if self.transaction_id is not None:
-            now = datetime.datetime.now()
-            timeout = self.transaction_initiated + datetime.timedelta(seconds=self.transaction_timeout)
-            if now > timeout:
-                self._must_reload = True
-                raise ApiError(code='transaction_timed_out')
+        self._check_if_transaction_timed_out()
         if self._must_reload:
             self.data_db = self._load_json(self._data_db_path)
             self.meta_db = self._load_json(self._meta_db_path)
             if self.meta_db == {}:
-                self.meta_db = {'rev': 0, 'last_id': 0}
+                self.meta_db = {REV_KEY: 0, 'last_id': 0}
             self._must_reload = False
 
     def save(self):
@@ -67,21 +75,31 @@ class JsonTwoFileStorageHandler():
         self._save_json(self._meta_db_path, self.meta_db)
 
     def start_transaction(self, timeout=5):
-        transaction_id = 100
+        self.load()
+        transaction_id = uuid.uuid4()
+        self._revision_before_transaction = self.revision
         self.transaction_id = transaction_id
         self.transaction_initiated = datetime.datetime.now()
         self.transaction_timeout = timeout
-        return {'transaction_id': transaction_id}
-
-    def commit_transaction(self, transaction_id):
-        if transaction_id == self.transaction_id:
-            self.save()
-        self.transaction_id = None
+        return {'transaction_id': transaction_id, 'revision': self.revision}
 
     def abort_transaction(self, transaction_id):
+        """
+        Still returns revision if transaction doesn't exist or timed out.
+        """
+        self.load()
         if transaction_id == self.transaction_id:
             self._must_reload = True
-        self.transaction_id = None
+            self.revision = self._revision_before_transaction
+            self._destroy_transaction()
+        return {'revision': self.revision}
+
+    def commit_transaction(self, transaction_id):
+        self.load()
+        if transaction_id == self.transaction_id:
+            self.save()
+        self._destroy_transaction()
+        return {'revision': self.revision}
 
     def check_transaction(self, transaction_id):
         if transaction_id is None and self.transaction_id is None:
@@ -95,11 +113,24 @@ class JsonTwoFileStorageHandler():
             raise ApiError(code='transaction_id_mismatch')
 
     def check_revision(self, revision):
-        if int(revision) != self.meta_db['rev']:
+        if int(revision) != self.revision:
             raise ApiError(code='revision_mismatch', data={
                 'client_revision': int(revision),
-                'server_revision': self.meta_db['rev'],
+                'server_revision': self.revision,
                 })
+
+    def _check_if_transaction_timed_out(self):
+        if self.transaction_id is not None:
+            now = datetime.datetime.now()
+            timeout = self.transaction_initiated + datetime.timedelta(seconds=self.transaction_timeout)
+            if now > timeout:
+                self._must_reload = True
+                self._destroy_transaction()
+                raise ApiError(code='transaction_timed_out')
+
+    def _destroy_transaction(self):
+        self.transaction_id = None
+        self._revision_before_transaction = None
 
     def _save_json(self, filepath, data):
         with open(filepath, 'w') as fp:
@@ -130,22 +161,24 @@ class ActionsMixin():
             update > list
             delete > list
 
-
-        The return dict will contains keys: revision, queries and new_ids
-        Reads are performed last, so will take into account changes made
-
         action_sets_example = {
             "create": {...},          # optional
             "read":   {...},          # optional
-            "update": {...},          # optional
-            "delete": {...},          # optional
+            "update": [...],          # optional
+            "delete": [...],          # optional
         }
+
+        The format for each is convered below
+
+        The return dict will contains keys: revision, queries and new_ids
 
         result_example = {
             "revision": 1234,
             "queries":  {...},
             "new_ids":  {...}
         }
+
+        Reads are performed last, so will take into account changes made
 
         read_example: {
             "query_a": {                    # the return identifier
@@ -222,7 +255,7 @@ class ActionsMixin():
             for key, params in action_sets['read'].items():
                 queries[key] = self._read(**params)
         result = {
-            'revision': self.meta_db['rev'],
+            'revision': self.revision,
             'queries': queries,
             'new_ids': new_ids
         }
@@ -244,7 +277,7 @@ class ActionsMixin():
         record['id'] = key
         collection[key] = record
         self.meta_db['last_id'] = key
-        self.meta_db['rev'] += 1
+        self.revision += 1
         return key
 
     def _update(self, path, key, record):
@@ -254,7 +287,7 @@ class ActionsMixin():
         collection = self._drill(path)
         collection[key] = record
         record['id'] = key
-        self.meta_db['rev'] += 1
+        self.revision += 1
         return key
 
     def _delete(self, path, key):
@@ -263,7 +296,7 @@ class ActionsMixin():
         """
         collection = self._drill(path)
         del collection[key]
-        self.meta_db['rev'] += 1
+        self.revision += 1
         return key
 
     def _read(self, path):
