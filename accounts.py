@@ -23,7 +23,7 @@ class AccountRegister:
     def _encrypt(self, password):
         return password * 2
 
-    def create_account(self, user, password):
+    def create_user(self, user, password):
         self._load()
         if user in self._data['accounts']:
             raise ApiError(code="account_exists")
