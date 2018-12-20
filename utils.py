@@ -2,21 +2,44 @@ import os
 import ujson
 
 
+class ApiError(Exception):
+
+    def __init__(self, code="uncaught", msg=None, data=None):
+        if msg is None:
+            msg = code
+        super(Exception, self).__init__(msg)
+        self.code = code
+        self.data = data
+
+
 class JsonFileWrapper:
     """Wrapper around a json file"""
 
     def __init__(self, filepath):
-        self.filepath = filepath
+        self._filepath = filepath
+        self._must_reload = True
+        self._loaded_timestamp = None
+        self._data = {}
 
-    def save(self, data):
-        with open(self.filepath, 'w') as fp:
+    def save(self, data=None):
+        if data is None:
+            data = self._data
+        with open(self._filepath, 'w') as fp:
             ujson.dump(data, fp, indent=4)
 
-    def load(self):
-        if not os.path.exists(self.filepath):
-            self.save({})
-        with open(self.filepath) as fp:
-            return ujson.load(fp)
+    def load(self, force=False):
+        if self._must_reload or self._file_on_disk_changed():
+            if not os.path.exists(self._filepath):
+                self.save()
+            with open(self._filepath) as fp:
+                self._data = ujson.load(fp)
+        return self._data
+
+    def _file_on_disk_changed(self):
+        # TODO: implement
+        return False
+        if self._loaded_timestamp is None:
+            return True
 
 
 def get_two_file_paths(base_path, database_name):

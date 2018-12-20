@@ -1,83 +1,56 @@
+import os
 from bottle import default_app, route, template, static_file, request, response,\
     HTTPError
-from json_storage import ApiError, MyJsonStorageHandler
-
+from json_storage import MyJsonStorageHandler
+from accounts import AccountRegister
+from utils import ApiError
 
 JSON_BASE = '/home/andyhasit/pointy/json_dbs'
-STORES = {}
+JSON_STORES = {}
 PASSWORDS = {
     ('pointy_v2', 'andyhasit') : 'frickingawesome45'
     }
-APPS = ('pointy_v2', )
+
+ACCOUNT_REGISTER = AccountRegister('/home/andyhasit/pointy/json_dbs/accounts.json')
+
+VALID_APPS = (
+    'pointy_v2',
+)
+
+VALID_METHODS = (
+    'push_actions',
+    'start_transaction',
+    'abort_transaction',
+    'commit_transaction'
+)
 
 
-application = default_app()
-
-@application.hook('after_request')
-def enable_cors():
-    """
-    You need to add some headers to each request.
-    Don't use the wildcard '*' for Access-Control-Allow-Origin in production.
-    """
-    response.headers['Access-Control-Allow-Origin'] = '*' # 'http://localhost:100'
-    response.headers['Access-Control-Allow-Methods'] = 'PUT, GET, POST, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Authorization, Origin, Accept, Content-Type, X-Requested-With'
-    #'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
-
-
-@route('/static/<filename>')
-def server_static(filename):
-    return static_file(filename, root='/static')
-
-
-@route('/', method = 'OPTIONS')
-@route('/<path:path>', method = 'OPTIONS')
-def options_handler(path = None):
-    return
-
-
-@route('/')
-def index():
-    return template('index')
-
-
-@route('/<app>/actions', method='POST')
-def actions(app):
-    return wrap_storage_call(request, app, 'do_actions', request.json)
-
-
-@route('/<app>/start_transaction', method='POST')
-def start_transaction(app):
-    return wrap_storage_call(request, app, 'start_transaction', request.json)
-
-
-@route('/<app>/abort_transaction', method='POST')
-def abort_transaction(app):
-    return wrap_storage_call(request, app, 'abort_transaction', request.json)
-
-
-@route('/<app>/commit_transaction', method='POST')
-def commit_transaction(app):
-    return wrap_storage_call(request, app, 'commit_transaction', request.json)
-
-
-def get_storage(app, user, password):
-    key = (app, user)
-    if app not in APPS:
-        raise HTTPError(404, 'App {} does not exist'.format(app))
-    if key not in PASSWORDS:
+def validate_user(app, user, password):
+    if not ACCOUNT_REGISTER.has_account_for_app(app, user):
         raise HTTPError(403, 'No account for user {} in app {}'.format(user, app))
-    if PASSWORDS[key] != password:
+    if not ACCOUNT_REGISTER.password_matches(user, password):
         err = HTTPError(401, 'Invalid login')
         err.add_header('WWW-Authenticate','')
         raise err
-    if key in STORES:
-        storage = STORES[key]
+
+
+def get_storage(app, user):
+    key = (app, user)
+    if key in JSON_STORES:
+        storage = JSON_STORES[key]
     else:
-        storage = MyJsonStorageHandler()
-        storage.set_paths(JSON_BASE, '{}____{}'.format(*key))
-        STORES[key] = storage
+        data_db_path = os.path.join(JSON_BASE, app, user, 'data.json')
+        meta_data_db_path = os.path.join(JSON_BASE, app, user, 'meta_data.json')
+        storage = MyJsonStorageHandler(data_db_path, meta_data_db_path)
+        JSON_STORES[key] = storage
     return storage
+
+
+def validate_app_method(app, method):
+    if app not in VALID_APPS:
+        raise HTTPError(404, 'App {} does not exist'.format(app))
+    if method not in VALID_METHODS:
+        raise HTTPError(404, 'App {} does not exist'.format(app))
 
 
 def wrap_storage_call(request, app, method, params):
@@ -86,6 +59,8 @@ def wrap_storage_call(request, app, method, params):
     """
     try:
         user, password = request.auth or (None, None)
+        validate_app_method(app, method)
+        validate_user(app, user, password)
         storage = get_storage(app, user, password)
         result = getattr(storage, method)(**params)
         return {
@@ -111,3 +86,44 @@ def wrap_storage_call(request, app, method, params):
                 "message": str(e)
             }
         }
+
+application = default_app()
+
+
+# Enables CORS
+@application.hook('after_request')
+def enable_cors():
+    """
+    You need to add some headers to each request.
+    Don't use the wildcard '*' for Access-Control-Allow-Origin in production.
+    """
+    response.headers['Access-Control-Allow-Origin'] = '*' # 'http://localhost:100'
+    response.headers['Access-Control-Allow-Methods'] = 'PUT, GET, POST, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Authorization, Origin, Accept, Content-Type, X-Requested-With'
+    #'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
+
+
+# For pre-flight options
+@route('/', method = 'OPTIONS')
+@route('/<path:path>', method = 'OPTIONS')
+def options_handler(path = None):
+    return
+
+
+# For static files
+@route('/static/<filename>')
+def server_static(filename):
+    return static_file(filename, root='/static')
+
+
+# For the home page
+@route('/')
+def index():
+    return template('index')
+
+
+# The app's API actions
+@route('/<app>/<method>', method='POST')
+def app_method(app, method):
+    return wrap_storage_call(request, app, method, request.json)
+
