@@ -25,11 +25,6 @@ def enable_cors():
     #'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
 
 
-def check(user, pw):
-    # Check user/pw here and return True/False
-    return user == 'me' and pw =='poo'
-
-
 @route('/static/<filename>')
 def server_static(filename):
     return static_file(filename, root='/static')
@@ -49,6 +44,21 @@ def index():
 @route('/<app>/actions', method='POST')
 def actions(app):
     return wrap_storage_call(request, app, 'do_actions', request.json)
+
+
+@route('/<app>/start_transaction', method='POST')
+def start_transaction(app):
+    return wrap_storage_call(request, app, 'start_transaction', request.json)
+
+
+@route('/<app>/abort_transaction', method='POST')
+def abort_transaction(app):
+    return wrap_storage_call(request, app, 'abort_transaction', request.json)
+
+
+@route('/<app>/commit_transaction', method='POST')
+def commit_transaction(app):
+    return wrap_storage_call(request, app, 'commit_transaction', request.json)
 
 
 def get_storage(app, user, password):

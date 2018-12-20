@@ -3,6 +3,7 @@ import pytest
 import shutil
 from datetime import datetime
 from ..json_storage import MyJsonStorageHandler, ApiError
+from ..utils import get_two_file_paths
 
 
 JSON_TEST_DIR = os.path.join(os.path.dirname(__file__), 'json_dbs')
@@ -31,8 +32,9 @@ def my_fixture():
 
 
 def get_storage():
-    storage = MyJsonStorageHandler()
-    storage.set_paths(JSON_TEST_DIR, str(datetime.now().utcnow()))
+    db_name = str(datetime.now().utcnow())
+    db_file_paths = get_two_file_paths(JSON_TEST_DIR, db_name)
+    storage = MyJsonStorageHandler(*db_file_paths)
     return storage
 
 
