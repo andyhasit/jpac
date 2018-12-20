@@ -1,15 +1,14 @@
 """
 A crude but flexible JSON database which:
-    - Acccepts akes modification instructions as json
+    - Acccepts modification instructions as json
     - Allows cross request transactions
     - Enables version mismatch handling
 
 TODO:
-    Wrap data in properties
     Test API for transactions
     get_revision
     get_entire_db
-    username sanitisation & check exists
+    write curl tests for API - or see what Bottle has to offer.
 
 """
 import datetime

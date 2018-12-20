@@ -1,7 +1,5 @@
 import os
 import pytest
-import shutil
-from datetime import datetime
 from ..json_storage import MyJsonStorageHandler
 from ..utils import ApiError
 from .utils_for_tests import wipe_json_dbs, tmp_db_file
