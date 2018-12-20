@@ -1,5 +1,4 @@
 import os
-import pytest
 import shutil
 from datetime import datetime
 
@@ -12,4 +11,4 @@ def wipe_json_dbs():
     os.makedirs(JSON_TEST_DIR)
 
 def tmp_db_file(name):
-    return os.path.join(JSON_TEST_DIR, '{}_{}.json'.format(datetime.now().utcnow()), name)
+    return os.path.join(JSON_TEST_DIR, '{}_{}.json'.format(name, datetime.now().utcnow()))

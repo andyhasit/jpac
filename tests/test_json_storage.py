@@ -2,16 +2,17 @@ import os
 import pytest
 import shutil
 from datetime import datetime
-from ..json_storage import MyJsonStorageHandler, ApiError
-from ..utils import get_two_file_paths
+from ..json_storage import MyJsonStorageHandler
+from ..utils import ApiError
+from .utils_for_tests import wipe_json_dbs, tmp_db_file
 
 
 JSON_TEST_DIR = os.path.join(os.path.dirname(__file__), 'json_dbs')
+'''
 @pytest.fixture(scope="module", autouse=True)
 def my_fixture():
-    shutil.rmtree(JSON_TEST_DIR)
-    os.makedirs(JSON_TEST_DIR)
-
+    wipe_json_dbs()
+'''
 
 CREATE_RECORD = {
     "create": {
@@ -32,10 +33,7 @@ READ_RECORDS = {
 
 
 def get_storage():
-    db_name = str(datetime.now().utcnow())
-    db_file_paths = get_two_file_paths(JSON_TEST_DIR, db_name)
-    storage = MyJsonStorageHandler(*db_file_paths)
-    return storage
+    return MyJsonStorageHandler(tmp_db_file('data'), tmp_db_file('meta'))
 
 
 def test_create():

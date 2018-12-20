@@ -15,11 +15,13 @@ class ApiError(Exception):
 class JsonFileWrapper:
     """Wrapper around a json file"""
 
-    def __init__(self, filepath):
+    def __init__(self, filepath, initial_data=None):
+        if initial_data is None:
+            initial_data = {}
         self._filepath = filepath
         self._must_reload = True
         self._loaded_timestamp = None
-        self._data = {}
+        self._data = initial_data
 
     def save(self, data=None):
         if data is None:

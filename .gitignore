@@ -2,3 +2,4 @@ __pycache__
 /json_dbs
 /tests/json_dbs
 /venv
+SECRET_KEY
