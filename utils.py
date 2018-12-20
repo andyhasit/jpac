@@ -30,11 +30,12 @@ class JsonFileWrapper:
             ujson.dump(data, fp, indent=4)
 
     def load(self, force=False):
-        if self._must_reload or self._file_on_disk_changed():
+        if force or self._must_reload or self._file_on_disk_changed():
             if not os.path.exists(self._filepath):
                 self.save()
             with open(self._filepath) as fp:
                 self._data = ujson.load(fp)
+            self._must_reload = False
         return self._data
 
     def _file_on_disk_changed(self):

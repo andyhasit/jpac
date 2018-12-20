@@ -8,7 +8,8 @@ def my_fixture():
     wipe_json_dbs()
 '''
 
-SECRET_KEY = Fernet.generate_key()
+# Sava as string as that's how it will be stored in file
+SECRET_KEY = str(Fernet.generate_key(), 'UTF-8')
 
 
 def new_account_register():
@@ -43,3 +44,8 @@ def test_password_matching():
     ar.create_user('bob', '1234')
     assert ar.password_matches('bob', '1234')
     assert not ar.password_matches('bob', '12344567')
+
+    ar.change_password('bob', 'new_pass')
+    assert ar.password_matches('bob', 'new_pass')
+    assert not ar.password_matches('bob', '1234')
+

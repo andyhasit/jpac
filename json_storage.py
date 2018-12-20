@@ -9,7 +9,7 @@ TODO:
     Test API for transactions
     get_revision
     get_entire_db
-
+    username sanitisation & check exists
 
 """
 import datetime
@@ -39,7 +39,7 @@ class JsonTwoFileStorageHandler:
         self._transaction_start_time = None
         self._transaction_timeout = None
         self._data_file_wrapper = JsonFileWrapper(data_db_path)
-        self._meta_file_wrapper = JsonFileWrapper(metadata_db_path)
+        self._meta_file_wrapper = JsonFileWrapper(metadata_db_path, {REV_KEY: 0, LAST_ID_KEY: 0})
 
     @property
     def revision(self):
@@ -62,10 +62,8 @@ class JsonTwoFileStorageHandler:
     def load(self):
         self._check_if_transaction_timed_out()
         if self._must_reload:
-            self.data = self._data_file_wrapper.load()
-            self._metadata = self._meta_file_wrapper.load()
-            if self._metadata == {}:
-                self._metadata = {REV_KEY: 0, LAST_ID_KEY: 0}
+            self.data = self._data_file_wrapper.load(True)
+            self._metadata = self._meta_file_wrapper.load(True)
             self._must_reload = False
 
     def save(self):
@@ -86,16 +84,14 @@ class JsonTwoFileStorageHandler:
         """
         self.load()
         if transaction_id == self._transaction_id:
-            self._must_reload = True
-            self.revision = self._revision_before_transaction
-            self._destroy_transaction()
+            self._rollback_transaction()
         return {'revision': self.revision}
 
     def commit_transaction(self, transaction_id):
         self.load()
-        if transaction_id == self._transaction_id:
-            self.save()
-        self._destroy_transaction()
+        self.check_transaction(transaction_id)
+        self.save()
+        self._clear_transaction()
         return {'revision': self.revision}
 
     def check_transaction(self, transaction_id):
@@ -111,23 +107,38 @@ class JsonTwoFileStorageHandler:
 
     def check_revision(self, revision):
         if int(revision) != self.revision:
-            raise ApiError(code='revision_mismatch', data={
-                'client_revision': int(revision),
-                'server_revision': self.revision,
-                })
+            raise ApiError(
+                code='revision_mismatch',
+                data={
+                    'client_revision': revision,
+                    'server_revision': self.revision,
+                },
+                msg='Client revision: {}. Server revision: {}'.format(revision, self.revision)
+            )
 
     def _check_if_transaction_timed_out(self):
         if self._transaction_id is not None:
             now = datetime.datetime.now()
             timeout = self._transaction_start_time + datetime.timedelta(seconds=self._transaction_timeout)
             if now > timeout:
-                self._must_reload = True
-                self._destroy_transaction()
+                self._rollback_transaction()
                 raise ApiError(code='transaction_timed_out')
 
-    def _destroy_transaction(self):
+    def _clear_transaction(self):
+        """
+        To be called once a transaction is finished, regardless of outcome.
+        """
         self._transaction_id = None
         self._revision_before_transaction = None
+
+    def _rollback_transaction(self):
+        """
+        Annuls the current transaction.
+        """
+        assert self._transaction_id is not None
+        self._must_reload = True
+        self.revision = self._revision_before_transaction
+        self._clear_transaction()
 
 
 class ActionsMixin():
