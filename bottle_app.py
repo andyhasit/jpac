@@ -7,9 +7,6 @@ from utils import ApiError
 
 JSON_BASE = '/home/andyhasit/pointy/json_dbs'
 JSON_STORES = {}
-PASSWORDS = {
-    ('pointy_v2', 'andyhasit') : 'frickingawesome45'
-    }
 
 ACCOUNT_REGISTER = AccountRegister('/home/andyhasit/pointy/json_dbs/accounts.json')
 

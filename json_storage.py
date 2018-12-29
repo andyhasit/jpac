@@ -4,12 +4,6 @@ A crude but flexible JSON database which:
     - Allows cross request transactions
     - Enables version mismatch handling
 
-TODO:
-    Test API for transactions
-    get_revision
-    get_entire_db
-    write curl tests for API - or see what Bottle has to offer.
-
 """
 import datetime
 import uuid
@@ -261,9 +255,10 @@ class ActionsMixin():
     def _drill(self, path):
         collection = self.data
         for chunk in path.split('/'):
-            if chunk not in collection:
-                collection[chunk] = {}
-            collection = collection[chunk]
+            if chunk != '':
+                if chunk not in collection:
+                    collection[chunk] = {}
+                collection = collection[chunk]
         return collection
 
     def _create(self, path, record):
